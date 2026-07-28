@@ -84,11 +84,12 @@
     const analytics = getAnalytics(app);
     const database = getDatabase(app);
 
-    let rawRoomInput = "";  // 使用者輸入的原始頻道名稱
-    let baseRoom = "";      // 扣除 -1 後的真實資料庫頻道名稱
-    let isFlipped = false;  // 是否開啟鏡像翻轉模式
+    let rawRoomInput = "";  
+    let baseRoom = "";      
+    let isFlipped = false;  
     let selectedPitch = "";
     let selectedLoc = "";
+    let roomUnsubscribe = null; // 用來儲存房間監聽的取消函式
 
     // 九宮格左右鏡像對照表
     const flipMap = {
@@ -103,7 +104,6 @@
       "中下": "中下"
     };
 
-    // 翻轉位置的輔助函式
     function getFlippedLoc(loc) {
       return flipMap[loc] || loc;
     }
@@ -116,12 +116,27 @@
     const previewTitle = document.getElementById('preview-title');
     const previewText = document.getElementById('preview-text');
 
+    // 監控真實的 Firebase 伺服器連線狀態
+    const connectedRef = ref(database, ".info/connected");
+    onValue(connectedRef, (snap) => {
+      if (snap.val() === true && baseRoom) {
+        statusText.innerText = `狀態：已連線至頻道「${baseRoom}」${isFlipped ? ' (鏡像視角)' : ''}`;
+        statusText.classList.replace('text-slate-400', 'text-emerald-400');
+        controlPanel.classList.remove('opacity-50', 'pointer-events-none');
+      }
+    });
+
     // 加入/連線至房間頻道
     joinBtn.addEventListener('click', () => {
       rawRoomInput = roomIdInput.value.trim();
       if (!rawRoomInput) {
         alert("請輸入房間代碼！");
         return;
+      }
+
+      // 如果之前已經有聽其他房間，先取消舊的監聽
+      if (roomUnsubscribe) {
+        roomUnsubscribe();
       }
 
       // 判斷是否帶有 -1 尾綴
@@ -135,22 +150,23 @@
         modeText.classList.add('hidden');
       }
 
-      statusText.innerText = `狀態：已監聽頻道「${baseRoom}」${isFlipped ? ' (鏡像視角)' : ''}`;
-      statusText.classList.replace('text-slate-400', 'text-emerald-400');
+      statusText.innerText = `狀態：連線中...`;
+      statusText.className = "text-xs text-yellow-400 mt-2";
+
+      // 立即解鎖控制面板
       controlPanel.classList.remove('opacity-50', 'pointer-events-none');
 
-      // 監聽共用頻道資料變化
+      // 開始即時監聽指定房間的資料變化
       const pitchRef = ref(database, 'rooms/' + baseRoom);
-      onValue(pitchRef, (snapshot) => {
+      roomUnsubscribe = onValue(pitchRef, (snapshot) => {
         const data = snapshot.val();
         if (data && data.pitch && data.loc) {
-          // 計算符合當前視角的位置名稱
           const finalLoc = isFlipped ? getFlippedLoc(data.loc) : data.loc;
           
-          // 1. 播放中文語音
+          // 語音播報
           speakPitch(`${data.pitch}，${finalLoc}`);
 
-          // 2. 所有連線者同步更新 UI 顯示最新發送的暗號
+          // 同步更新所有裝置的最新發送顯示
           previewTitle.innerText = "最新發送";
           previewText.className = "text-lg font-bold text-emerald-400";
           previewText.innerText = `已發送：${data.pitch} - ${finalLoc}`;
@@ -174,7 +190,6 @@
       });
     });
 
-    // 更新預覽文字（開始重新選擇時呼叫）
     function updatePreview() {
       previewTitle.innerText = "目前選擇";
       previewText.className = "text-lg font-bold text-yellow-400";
@@ -192,7 +207,6 @@
         return;
       }
 
-      // 若開啟鏡像模式，發送時先將位置轉換回「標準捕手視角」寫入資料庫
       const targetLoc = isFlipped ? getFlippedLoc(selectedLoc) : selectedLoc;
 
       set(ref(database, 'rooms/' + baseRoom), {
@@ -201,19 +215,16 @@
         timestamp: Date.now()
       });
 
-      // 重置當前設備的選擇暫存，等待下一次點擊
       selectedPitch = "";
       selectedLoc = "";
     });
 
-    // 中文語音播報 (SpeechSynthesis)
+    // 中文語音播報 (修正「指叉球」重複讀取問題)
     function speakPitch(text) {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
         
-        // 修復「指叉球」語音重複朗讀問題：將「指叉球」轉換為諧音「紙叉球」交給語音引擎
         const spokenText = text.replace(/指叉球/g, "紙叉球");
-
         const utterance = new SpeechSynthesisUtterance(spokenText);
         utterance.lang = 'zh-TW'; 
         utterance.rate = 1.0;
