@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>網頁版 Pitchcom 系統</title>
+  <title>網頁版 Pitchcom 系統 (中文九宮格版)</title>
   <!-- Tailwind CSS 用於快速樣式設定 -->
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -26,24 +26,27 @@
   <!-- 配球控制面板 -->
   <div id="control-panel" class="bg-slate-800 p-6 rounded-xl max-w-md w-full shadow-lg border border-slate-700 opacity-50 pointer-events-none transition-all">
     
-    <!-- 球種選擇 -->
+    <!-- 1. 球種選擇 -->
     <h2 class="text-sm font-semibold mb-2 text-slate-400">1. 選擇球種 (Pitch Type)</h2>
-    <div class="grid grid-cols-2 gap-2 mb-4">
-      <button class="pitch-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-3 rounded font-medium text-left transition" data-pitch="Fastball">直球 (Fastball)</button>
-      <button class="pitch-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-3 rounded font-medium text-left transition" data-pitch="Slider">滑球 (Slider)</button>
-      <button class="pitch-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-3 rounded font-medium text-left transition" data-pitch="Curveball">曲球 (Curveball)</button>
-      <button class="pitch-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-3 rounded font-medium text-left transition" data-pitch="Changeup">變速球 (Changeup)</button>
+    <div class="grid grid-cols-2 gap-2 mb-6">
+      <button class="pitch-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-3 rounded font-medium text-center transition" data-pitch="直球">直球</button>
+      <button class="pitch-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-3 rounded font-medium text-center transition" data-pitch="速球">速球</button>
+      <button class="pitch-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-3 rounded font-medium text-center transition" data-pitch="變化球">變化球</button>
+      <button class="pitch-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-3 rounded font-medium text-center transition" data-pitch="指叉球">指叉球</button>
     </div>
 
-    <!-- 位置選擇 -->
-    <h2 class="text-sm font-semibold mb-2 text-slate-400">2. 選擇位置 (Location)</h2>
+    <!-- 2. 位置選擇 (九宮格 1~9 號位) -->
+    <h2 class="text-sm font-semibold mb-2 text-slate-400">2. 選擇位置 (九宮格 1~9 號位)</h2>
     <div class="grid grid-cols-3 gap-2 mb-6">
-      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-2 rounded text-sm text-center transition" data-loc="High Inside">高內角</button>
-      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-2 rounded text-sm text-center transition" data-loc="High Middle">高中央</button>
-      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-2 rounded text-sm text-center transition" data-loc="High Outside">高外角</button>
-      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-2 rounded text-sm text-center transition" data-loc="Low Inside">低內角</button>
-      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-2 rounded text-sm text-center transition" data-loc="Low Middle">低中央</button>
-      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-2 rounded text-sm text-center transition" data-loc="Low Outside">低外角</button>
+      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-4 rounded text-lg font-bold text-center transition" data-loc="1號">1</button>
+      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-4 rounded text-lg font-bold text-center transition" data-loc="2號">2</button>
+      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-4 rounded text-lg font-bold text-center transition" data-loc="3號">3</button>
+      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-4 rounded text-lg font-bold text-center transition" data-loc="4號">4</button>
+      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-4 rounded text-lg font-bold text-center transition" data-loc="5號">5</button>
+      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-4 rounded text-lg font-bold text-center transition" data-loc="6號">6</button>
+      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-4 rounded text-lg font-bold text-center transition" data-loc="7號">7</button>
+      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-4 rounded text-lg font-bold text-center transition" data-loc="8號">8</button>
+      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-4 rounded text-lg font-bold text-center transition" data-loc="9號">9</button>
     </div>
 
     <!-- 選擇預覽與發送 -->
@@ -59,11 +62,11 @@
 
   <!-- Firebase JavaScript SDK (Modular) -->
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
-    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
 
-    // 你的 Firebase 專案配置
+    // 使用你提供的 Firebase 配置資訊
     const firebaseConfig = {
       apiKey: "AIzaSyCBCKdb3uL3jTxgRbkIfKwcxKfX8yPgqzc",
       authDomain: "pitchcom-83b2c.firebaseapp.com",
@@ -75,7 +78,7 @@
       measurementId: "G-DSWYD9KTJL"
     };
 
-    // 初始化 Firebase 與 Realtime Database
+    // 初始化 Firebase
     const app = initializeApp(firebaseConfig);
     const analytics = getAnalytics(app);
     const database = getDatabase(app);
@@ -121,7 +124,7 @@
       });
     });
 
-    // 位置按鈕點擊處理
+    // 位置按鈕點擊處理 (九宮格)
     document.querySelectorAll('.loc-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         selectedLoc = e.target.getAttribute('data-loc');
@@ -134,7 +137,7 @@
       previewText.innerText = `${selectedPitch || '未選擇球種'} - ${selectedLoc || '未選擇位置'}`;
     }
 
-    // 發送暗號至 Firebase Realtime Database
+    // 發送暗號至 Firebase
     document.getElementById('send-btn').addEventListener('click', () => {
       if (!currentRoom) {
         alert("請先進入頻道！");
@@ -145,24 +148,33 @@
         return;
       }
 
-      const signalText = `${selectedPitch} ${selectedLoc}`;
+      const signalText = `${selectedPitch}，${selectedLoc}`;
       
-      // 更新資料，帶上記錄時間以觸發即時監聽
       set(ref(database, 'rooms/' + currentRoom), {
         text: signalText,
         timestamp: Date.now()
       });
     });
 
-    // 文字轉語音 (SpeechSynthesis)
+    // 中文語音播報 (SpeechSynthesis)
     function speakPitch(text) {
       if ('speechSynthesis' in window) {
-        // 先停止前一發聲，避免暗號積壓 delay
         window.speechSynthesis.cancel();
         
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-US'; // 英文發音（若要中文可改為 'zh-TW'）
-        utterance.rate = 1.1;     // 發音速度稍快以提升即時感
+        utterance.lang = 'zh-TW'; 
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length > 0) {
+          const preferredVoice = voices.find(voice => 
+            voice.lang.includes('zh') && 
+            (voice.name.includes('Male') || voice.name.includes('Microsoft'))
+          );
+          if (preferredVoice) utterance.voice = preferredVoice;
+        }
+
         window.speechSynthesis.speak(utterance);
       }
     }
