@@ -144,9 +144,16 @@
       onValue(pitchRef, (snapshot) => {
         const data = snapshot.val();
         if (data && data.pitch && data.loc) {
-          // 若開啟鏡像模式，收到暗號時把位置翻轉後再唸出
+          // 計算符合當前視角的位置名稱
           const finalLoc = isFlipped ? getFlippedLoc(data.loc) : data.loc;
+          
+          // 1. 播放中文語音
           speakPitch(`${data.pitch}，${finalLoc}`);
+
+          // 2. 所有連線者同步更新 UI 顯示最新發送的暗號
+          previewTitle.innerText = "最新發送";
+          previewText.className = "text-lg font-bold text-emerald-400";
+          previewText.innerText = `已發送：${data.pitch} - ${finalLoc}`;
         }
       });
     });
@@ -194,12 +201,7 @@
         timestamp: Date.now()
       });
 
-      // 同步更新 UI 呈現已發送暗號，並標示為綠色
-      previewTitle.innerText = "最新發送";
-      previewText.className = "text-lg font-bold text-emerald-400";
-      previewText.innerText = `已發送：${selectedPitch} - ${selectedLoc}`;
-
-      // 重置選擇變數，等待下次點擊
+      // 重置當前設備的選擇暫存，等待下一次點擊
       selectedPitch = "";
       selectedLoc = "";
     });
@@ -209,7 +211,10 @@
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
         
-        const utterance = new SpeechSynthesisUtterance(text);
+        // 修復「指叉球」語音重複朗讀問題：將「指叉球」轉換為諧音「紙叉球」交給語音引擎
+        const spokenText = text.replace(/指叉球/g, "紙叉球");
+
+        const utterance = new SpeechSynthesisUtterance(spokenText);
         utterance.lang = 'zh-TW'; 
         utterance.rate = 1.0;
         utterance.pitch = 1.0;
