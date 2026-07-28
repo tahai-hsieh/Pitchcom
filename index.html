@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>網頁版 Pitchcom 系統</title>
+  <!-- Tailwind CSS 用於快速樣式設定 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white min-h-screen p-4 flex flex-col items-center justify-center">
+
+  <h1 class="text-3xl font-bold mb-6 text-center">網頁版 Pitchcom 系統</h1>
+
+  <!-- 房間設定與加入 -->
+  <div class="bg-slate-800 p-6 rounded-xl max-w-md w-full mb-6 shadow-lg border border-slate-700">
+    <label class="block text-sm font-medium mb-2">輸入團隊 / 房間代碼：</label>
+    <div class="flex gap-2">
+      <input id="room-id" type="text" value="team01" placeholder="例如：team01" class="flex-1 p-2 rounded bg-slate-700 text-white border border-slate-600 focus:outline-none focus:border-blue-500">
+      <button id="join-btn" class="bg-blue-600 hover:bg-blue-500 active:bg-blue-700 px-4 py-2 rounded font-semibold transition">
+        進入頻道
+      </button>
+    </div>
+    <p id="status-text" class="text-xs text-slate-400 mt-2">狀態：未連線</p>
+  </div>
+
+  <!-- 配球控制面板 -->
+  <div id="control-panel" class="bg-slate-800 p-6 rounded-xl max-w-md w-full shadow-lg border border-slate-700 opacity-50 pointer-events-none transition-all">
+    
+    <!-- 球種選擇 -->
+    <h2 class="text-sm font-semibold mb-2 text-slate-400">1. 選擇球種 (Pitch Type)</h2>
+    <div class="grid grid-cols-2 gap-2 mb-4">
+      <button class="pitch-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-3 rounded font-medium text-left transition" data-pitch="Fastball">直球 (Fastball)</button>
+      <button class="pitch-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-3 rounded font-medium text-left transition" data-pitch="Slider">滑球 (Slider)</button>
+      <button class="pitch-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-3 rounded font-medium text-left transition" data-pitch="Curveball">曲球 (Curveball)</button>
+      <button class="pitch-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-3 rounded font-medium text-left transition" data-pitch="Changeup">變速球 (Changeup)</button>
+    </div>
+
+    <!-- 位置選擇 -->
+    <h2 class="text-sm font-semibold mb-2 text-slate-400">2. 選擇位置 (Location)</h2>
+    <div class="grid grid-cols-3 gap-2 mb-6">
+      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-2 rounded text-sm text-center transition" data-loc="High Inside">高內角</button>
+      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-2 rounded text-sm text-center transition" data-loc="High Middle">高中央</button>
+      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-2 rounded text-sm text-center transition" data-loc="High Outside">高外角</button>
+      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-2 rounded text-sm text-center transition" data-loc="Low Inside">低內角</button>
+      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-2 rounded text-sm text-center transition" data-loc="Low Middle">低中央</button>
+      <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-2 rounded text-sm text-center transition" data-loc="Low Outside">低外角</button>
+    </div>
+
+    <!-- 選擇預覽與發送 -->
+    <div class="bg-slate-900 p-3 rounded mb-4 text-center border border-slate-700">
+      <span class="text-xs text-slate-400 block">目前選擇</span>
+      <span id="preview-text" class="text-lg font-bold text-yellow-400">未選擇</span>
+    </div>
+
+    <button id="send-btn" class="w-full bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white py-3 rounded-lg font-bold text-lg shadow transition">
+      發送暗號
+    </button>
+  </div>
+
+  <!-- Firebase JavaScript SDK (Modular) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+    // 你的 Firebase 專案配置
+    const firebaseConfig = {
+      apiKey: "AIzaSyCBCKdb3uL3jTxgRbkIfKwcxKfX8yPgqzc",
+      authDomain: "pitchcom-83b2c.firebaseapp.com",
+      databaseURL: "https://pitchcom-83b2c-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "pitchcom-83b2c",
+      storageBucket: "pitchcom-83b2c.firebasestorage.app",
+      messagingSenderId: "310530384126",
+      appId: "1:310530384126:web:1a33d0a82d8e33c56105af",
+      measurementId: "G-DSWYD9KTJL"
+    };
+
+    // 初始化 Firebase 與 Realtime Database
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+    const database = getDatabase(app);
+
+    let currentRoom = "";
+    let selectedPitch = "";
+    let selectedLoc = "";
+
+    const joinBtn = document.getElementById('join-btn');
+    const roomIdInput = document.getElementById('room-id');
+    const statusText = document.getElementById('status-text');
+    const controlPanel = document.getElementById('control-panel');
+    const previewText = document.getElementById('preview-text');
+
+    // 加入/連線至房間頻道
+    joinBtn.addEventListener('click', () => {
+      const roomId = roomIdInput.value.trim();
+      if (!roomId) {
+        alert("請輸入房間代碼！");
+        return;
+      }
+
+      currentRoom = roomId;
+      statusText.innerText = `狀態：已監聽頻道「${currentRoom}」`;
+      statusText.classList.replace('text-slate-400', 'text-emerald-400');
+      controlPanel.classList.remove('opacity-50', 'pointer-events-none');
+
+      // 監聽 Firebase 指定房間的資料變化
+      const pitchRef = ref(database, 'rooms/' + currentRoom);
+      onValue(pitchRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data && data.text) {
+          speakPitch(data.text);
+        }
+      });
+    });
+
+    // 球種按鈕點擊處理
+    document.querySelectorAll('.pitch-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        selectedPitch = e.target.getAttribute('data-pitch');
+        updatePreview();
+      });
+    });
+
+    // 位置按鈕點擊處理
+    document.querySelectorAll('.loc-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        selectedLoc = e.target.getAttribute('data-loc');
+        updatePreview();
+      });
+    });
+
+    // 更新預覽文字
+    function updatePreview() {
+      previewText.innerText = `${selectedPitch || '未選擇球種'} - ${selectedLoc || '未選擇位置'}`;
+    }
+
+    // 發送暗號至 Firebase Realtime Database
+    document.getElementById('send-btn').addEventListener('click', () => {
+      if (!currentRoom) {
+        alert("請先進入頻道！");
+        return;
+      }
+      if (!selectedPitch || !selectedLoc) {
+        alert("請同時選擇球種與進壘位置！");
+        return;
+      }
+
+      const signalText = `${selectedPitch} ${selectedLoc}`;
+      
+      // 更新資料，帶上記錄時間以觸發即時監聽
+      set(ref(database, 'rooms/' + currentRoom), {
+        text: signalText,
+        timestamp: Date.now()
+      });
+    });
+
+    // 文字轉語音 (SpeechSynthesis)
+    function speakPitch(text) {
+      if ('speechSynthesis' in window) {
+        // 先停止前一發聲，避免暗號積壓 delay
+        window.speechSynthesis.cancel();
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US'; // 英文發音（若要中文可改為 'zh-TW'）
+        utterance.rate = 1.1;     // 發音速度稍快以提升即時感
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+  </script>
+</body>
+</html>
