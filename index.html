@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>網頁版 Pitchcom 系統 (中文九宮格版)</title>
+  <title>網頁版 Pitchcom 系統 (極速預載版)</title>
   <!-- Tailwind CSS 用於快速樣式設定 -->
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -36,7 +36,7 @@
       <button class="pitch-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-3 rounded font-medium text-center transition" data-pitch="指叉球">指叉球</button>
     </div>
 
-    <!-- 2. 位置選擇 (九宮格 方位名稱) -->
+    <!-- 2. 位置選擇 (九宮格) -->
     <h2 class="text-sm font-semibold mb-2 text-slate-400">2. 選擇位置 (九宮格)</h2>
     <div class="grid grid-cols-3 gap-2 mb-6">
       <button class="loc-btn bg-slate-700 hover:bg-slate-600 active:bg-blue-600 p-4 rounded text-base font-bold text-center transition" data-loc="左上">左上</button>
@@ -67,6 +67,7 @@
     import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js";
     import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
 
+    // Firebase 設定資訊
     const firebaseConfig = {
       apiKey: "AIzaSyCBCKdb3uL3jTxgRbkIfKwcxKfX8yPgqzc",
       authDomain: "pitchcom-83b2c.firebaseapp.com",
@@ -78,6 +79,7 @@
       measurementId: "G-DSWYD9KTJL"
     };
 
+    // 初始化 Firebase
     const app = initializeApp(firebaseConfig);
     const analytics = getAnalytics(app);
     const database = getDatabase(app);
@@ -89,8 +91,11 @@
     let selectedLoc = "";
     let roomUnsubscribe = null;
     let lastHandledTimestamp = 0;
-    let globalUtterance = null;
 
+    // 音效快取物件 (方案 A 核心)
+    const audioCache = {};
+
+    // 鏡像對照表
     const flipMap = {
       "左上": "右上", "右上": "左上",
       "中左": "中右", "中右": "中左",
@@ -110,7 +115,7 @@
     const previewTitle = document.getElementById('preview-title');
     const previewText = document.getElementById('preview-text');
 
-    // 加入/連線至房間頻道
+    // 點擊進入頻道
     joinBtn.addEventListener('click', () => {
       rawRoomInput = roomIdInput.value.trim();
       if (!rawRoomInput) {
@@ -118,12 +123,13 @@
         return;
       }
 
-      unlockAudioPermission();
+      // 1. 預加載全暗號組合音效 (方案 A)
+      preloadAudios();
 
-      if (roomUnsubscribe) {
-        roomUnsubscribe();
-      }
+      // 清除舊監聽
+      if (roomUnsubscribe) roomUnsubscribe();
 
+      // 判定是否為投手鏡像模式
       if (rawRoomInput.endsWith('-1')) {
         isFlipped = true;
         baseRoom = rawRoomInput.slice(0, -2); 
@@ -138,26 +144,31 @@
       statusText.classList.replace('text-slate-400', 'text-emerald-400');
       controlPanel.classList.remove('opacity-50', 'pointer-events-none');
 
+      // 記錄進入頻道時間點，避免重複唸出歷史暗號
       lastHandledTimestamp = Date.now();
 
+      // 2. 監聽 Firebase 房間資料變化
       const pitchRef = ref(database, 'rooms/' + baseRoom);
       roomUnsubscribe = onValue(pitchRef, (snapshot) => {
         const data = snapshot.val();
         if (data && data.pitch && data.loc && data.timestamp) {
           const finalLoc = isFlipped ? getFlippedLoc(data.loc) : data.loc;
           
+          // 所有連線裝置即時更新面板文字
           previewTitle.innerText = "最新發送";
           previewText.className = "text-lg font-bold text-emerald-400";
           previewText.innerText = `已發送：${data.pitch} - ${finalLoc}`;
 
+          // 若為新發送暗號，直接播放快取音效
           if (data.timestamp > lastHandledTimestamp) {
-            speakPitch(`${data.pitch}，${finalLoc}`);
+            playSignalAudio(`${data.pitch}，${finalLoc}`);
             lastHandledTimestamp = data.timestamp;
           }
         }
       });
     });
 
+    // 選擇球種
     document.querySelectorAll('.pitch-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         selectedPitch = e.target.getAttribute('data-pitch');
@@ -165,6 +176,7 @@
       });
     });
 
+    // 選擇位置
     document.querySelectorAll('.loc-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         selectedLoc = e.target.getAttribute('data-loc');
@@ -178,6 +190,7 @@
       previewText.innerText = `${selectedPitch || '未選擇球種'} - ${selectedLoc || '未選擇位置'}`;
     }
 
+    // 發送暗號
     document.getElementById('send-btn').addEventListener('click', () => {
       if (!baseRoom) {
         alert("請先進入頻道！");
@@ -200,52 +213,49 @@
       selectedLoc = "";
     });
 
-    // 避免平板瀏覽器進入休眠造成連線斷開/語音鎖死
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden && 'speechSynthesis' in window) {
-        window.speechSynthesis.resume();
-      }
-    });
+    // 方案 A：預先加載所有語音組合至記憶體快取中
+    function preloadAudios() {
+      const pitches = ["直球", "速球", "變化球", "指叉球"];
+      const locs = ["左上", "中上", "右上", "中左", "紅中", "中右", "左下", "中下", "右下"];
 
-    function unlockAudioPermission() {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.resume();
-        const silentUtterance = new SpeechSynthesisUtterance('');
-        silentUtterance.volume = 0;
-        window.speechSynthesis.speak(silentUtterance);
+      pitches.forEach(p => {
+        locs.forEach(l => {
+          const textKey = `${p}，${l}`;
+          // 將「指叉球」發音替換為更順暢的諧音「紙叉球」
+          const spokenText = textKey.replace(/指叉球/g, "紙叉球");
+          const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=zh-TW&client=tw-ob&q=${encodeURIComponent(spokenText)}`;
+          
+          const audio = new Audio();
+          audio.src = url;
+          audio.preload = "auto";
+          audioCache[textKey] = audio;
+        });
+      });
+    }
+
+    // 方案 A：從記憶體快取超低延遲播放音效
+    function playSignalAudio(textKey) {
+      if (audioCache[textKey]) {
+        // 重置播放進度並即刻發聲
+        audioCache[textKey].currentTime = 0;
+        audioCache[textKey].play().catch(err => {
+          console.warn("自動播放受限，嘗試降級播放：", err);
+          fallbackSpeech(textKey);
+        });
+      } else {
+        fallbackSpeech(textKey);
       }
     }
 
-    // 中文語音播報 (低延遲即時優化版)
-    function speakPitch(text) {
+    // 備用語音引擎（防止特殊狀況音效檔未加載）
+    function fallbackSpeech(textKey) {
       if ('speechSynthesis' in window) {
-        // 先喚醒語音服務，並立刻中斷所有正在排隊的語音（達成零延遲搶佔）
         window.speechSynthesis.resume();
         window.speechSynthesis.cancel();
-
-        const spokenText = text.replace(/指叉球/g, "紙叉球");
-        
-        globalUtterance = new SpeechSynthesisUtterance(spokenText);
-        globalUtterance.lang = 'zh-TW'; 
-        globalUtterance.rate = 1.1; // 稍微提高語速 (1.1x) 讓播報更俐落
-        globalUtterance.pitch = 1.0;
-
-        const voices = window.speechSynthesis.getVoices();
-        if (voices.length > 0) {
-          const preferredVoice = voices.find(voice => 
-            voice.lang.includes('zh') && 
-            (voice.name.includes('Male') || voice.name.includes('Microsoft'))
-          );
-          if (preferredVoice) globalUtterance.voice = preferredVoice;
-        }
-
-        globalUtterance.onend = () => { globalUtterance = null; };
-        globalUtterance.onerror = () => { globalUtterance = null; };
-
-        // 稍微延遲 10ms 確保 cancel() 清空完成後立刻播報
-        setTimeout(() => {
-          window.speechSynthesis.speak(globalUtterance);
-        }, 10);
+        const spokenText = textKey.replace(/指叉球/g, "紙叉球");
+        const utterance = new SpeechSynthesisUtterance(spokenText);
+        utterance.lang = 'zh-TW';
+        window.speechSynthesis.speak(utterance);
       }
     }
   </script>
