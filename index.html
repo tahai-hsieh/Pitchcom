@@ -7,7 +7,7 @@
   <!-- Tailwind CSS 用於快速樣式設定 -->
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-900 text-white min-h-screen p-4 flex flex-col items-center justify-center">
+<body class="bg-slate-900 text-white min-h-screen p-4 flex flex-col items-center justify-center select-none">
 
   <h1 class="text-3xl font-bold mb-6 text-center">網頁版 Pitchcom 系統</h1>
 
@@ -89,7 +89,7 @@
     let selectedLoc = "";
     let roomUnsubscribe = null;
     let lastHandledTimestamp = 0;
-    let globalUtterance = null; // 【修復重點1】宣告全域變數防止 GC 垃圾回收
+    let globalUtterance = null;
 
     const flipMap = {
       "左上": "右上", "右上": "左上",
@@ -200,6 +200,13 @@
       selectedLoc = "";
     });
 
+    // 避免平板瀏覽器進入休眠造成連線斷開/語音鎖死
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && 'speechSynthesis' in window) {
+        window.speechSynthesis.resume();
+      }
+    });
+
     function unlockAudioPermission() {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.resume();
@@ -209,19 +216,18 @@
       }
     }
 
-    // 中文語音播報 (強化版本，防垃圾回收與死鎖)
+    // 中文語音播報 (低延遲即時優化版)
     function speakPitch(text) {
       if ('speechSynthesis' in window) {
-        // 【修復重點2】發聲前先強制恢復 state，防止 Chrome 進入被凍結的 paused 狀態
+        // 先喚醒語音服務，並立刻中斷所有正在排隊的語音（達成零延遲搶佔）
         window.speechSynthesis.resume();
-        window.speechSynthesis.cancel(); // 停止前一次播放
+        window.speechSynthesis.cancel();
 
         const spokenText = text.replace(/指叉球/g, "紙叉球");
         
-        // 賦值給全域變數，避免物件被垃圾回收
         globalUtterance = new SpeechSynthesisUtterance(spokenText);
         globalUtterance.lang = 'zh-TW'; 
-        globalUtterance.rate = 1.0;
+        globalUtterance.rate = 1.1; // 稍微提高語速 (1.1x) 讓播報更俐落
         globalUtterance.pitch = 1.0;
 
         const voices = window.speechSynthesis.getVoices();
@@ -233,15 +239,13 @@
           if (preferredVoice) globalUtterance.voice = preferredVoice;
         }
 
-        // 播放完成後釋放引用
-        globalUtterance.onend = () => {
-          globalUtterance = null;
-        };
-        globalUtterance.onerror = () => {
-          globalUtterance = null;
-        };
+        globalUtterance.onend = () => { globalUtterance = null; };
+        globalUtterance.onerror = () => { globalUtterance = null; };
 
-        window.speechSynthesis.speak(globalUtterance);
+        // 稍微延遲 10ms 確保 cancel() 清空完成後立刻播報
+        setTimeout(() => {
+          window.speechSynthesis.speak(globalUtterance);
+        }, 10);
       }
     }
   </script>
