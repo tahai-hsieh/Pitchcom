@@ -67,7 +67,6 @@
     import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js";
     import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
 
-    // 使用你提供的 Firebase 配置資訊
     const firebaseConfig = {
       apiKey: "AIzaSyCBCKdb3uL3jTxgRbkIfKwcxKfX8yPgqzc",
       authDomain: "pitchcom-83b2c.firebaseapp.com",
@@ -79,7 +78,6 @@
       measurementId: "G-DSWYD9KTJL"
     };
 
-    // 初始化 Firebase
     const app = initializeApp(firebaseConfig);
     const analytics = getAnalytics(app);
     const database = getDatabase(app);
@@ -90,7 +88,7 @@
     let selectedPitch = "";
     let selectedLoc = "";
     let roomUnsubscribe = null;
-    let isInitialLoad = true; // 避免剛進房間時重覆念舊資料
+    let lastHandledTimestamp = 0; // 用時間戳記來精確記錄最新接收到的暗號
 
     const flipMap = {
       "左上": "右上", "右上": "左上",
@@ -119,7 +117,7 @@
         return;
       }
 
-      // 【核心關鍵修復】藉由使用者點擊按鈕，向瀏覽器解鎖語音播放權限
+      // 解鎖語音播放權限
       unlockAudioPermission();
 
       if (roomUnsubscribe) {
@@ -140,25 +138,26 @@
       statusText.classList.replace('text-slate-400', 'text-emerald-400');
       controlPanel.classList.remove('opacity-50', 'pointer-events-none');
 
-      isInitialLoad = true; // 重置初始載入標籤
+      // 紀錄加入房間的時間點，只播報加入「之後」發送的新暗號
+      lastHandledTimestamp = Date.now();
 
       // 開始監聽指定房間
       const pitchRef = ref(database, 'rooms/' + baseRoom);
       roomUnsubscribe = onValue(pitchRef, (snapshot) => {
         const data = snapshot.val();
-        if (data && data.pitch && data.loc) {
+        if (data && data.pitch && data.loc && data.timestamp) {
           const finalLoc = isFlipped ? getFlippedLoc(data.loc) : data.loc;
           
-          // 更新所有連線裝置的 UI 文字
+          // 1. 同步顯示 UI 最新發送暗號
           previewTitle.innerText = "最新發送";
           previewText.className = "text-lg font-bold text-emerald-400";
           previewText.innerText = `已發送：${data.pitch} - ${finalLoc}`;
 
-          // 如果是剛加入頻道抓到的舊紀錄，不發出聲音；只有收到新暗號才播報
-          if (!isInitialLoad) {
+          // 2. 如果發送時間戳記大於上次處理時間，表示是「新發送」的暗號，必須播報語音！
+          if (data.timestamp > lastHandledTimestamp) {
             speakPitch(`${data.pitch}，${finalLoc}`);
+            lastHandledTimestamp = data.timestamp; // 更新最後處理時間
           }
-          isInitialLoad = false;
         }
       });
     });
@@ -208,11 +207,11 @@
       selectedLoc = "";
     });
 
-    // 【解鎖語音權限】播放一個無聲語音，騙過瀏覽器隱私阻擋
+    // 解鎖語音權限
     function unlockAudioPermission() {
       if ('speechSynthesis' in window) {
         const silentUtterance = new SpeechSynthesisUtterance('');
-        silentUtterance.volume = 0; // 無聲
+        silentUtterance.volume = 0;
         window.speechSynthesis.speak(silentUtterance);
       }
     }
@@ -220,7 +219,7 @@
     // 中文語音播報
     function speakPitch(text) {
       if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel(); // 清除積壓語音
+        window.speechSynthesis.cancel();
         
         const spokenText = text.replace(/指叉球/g, "紙叉球");
         const utterance = new SpeechSynthesisUtterance(spokenText);
