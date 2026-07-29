@@ -88,7 +88,8 @@
     let selectedPitch = "";
     let selectedLoc = "";
     let roomUnsubscribe = null;
-    let lastHandledTimestamp = 0; // 用時間戳記來精確記錄最新接收到的暗號
+    let lastHandledTimestamp = 0;
+    let globalUtterance = null; // 【修復重點1】宣告全域變數防止 GC 垃圾回收
 
     const flipMap = {
       "左上": "右上", "右上": "左上",
@@ -117,7 +118,6 @@
         return;
       }
 
-      // 解鎖語音播放權限
       unlockAudioPermission();
 
       if (roomUnsubscribe) {
@@ -138,31 +138,26 @@
       statusText.classList.replace('text-slate-400', 'text-emerald-400');
       controlPanel.classList.remove('opacity-50', 'pointer-events-none');
 
-      // 紀錄加入房間的時間點，只播報加入「之後」發送的新暗號
       lastHandledTimestamp = Date.now();
 
-      // 開始監聽指定房間
       const pitchRef = ref(database, 'rooms/' + baseRoom);
       roomUnsubscribe = onValue(pitchRef, (snapshot) => {
         const data = snapshot.val();
         if (data && data.pitch && data.loc && data.timestamp) {
           const finalLoc = isFlipped ? getFlippedLoc(data.loc) : data.loc;
           
-          // 1. 同步顯示 UI 最新發送暗號
           previewTitle.innerText = "最新發送";
           previewText.className = "text-lg font-bold text-emerald-400";
           previewText.innerText = `已發送：${data.pitch} - ${finalLoc}`;
 
-          // 2. 如果發送時間戳記大於上次處理時間，表示是「新發送」的暗號，必須播報語音！
           if (data.timestamp > lastHandledTimestamp) {
             speakPitch(`${data.pitch}，${finalLoc}`);
-            lastHandledTimestamp = data.timestamp; // 更新最後處理時間
+            lastHandledTimestamp = data.timestamp;
           }
         }
       });
     });
 
-    // 球種按鈕點擊處理
     document.querySelectorAll('.pitch-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         selectedPitch = e.target.getAttribute('data-pitch');
@@ -170,7 +165,6 @@
       });
     });
 
-    // 位置按鈕點擊處理
     document.querySelectorAll('.loc-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         selectedLoc = e.target.getAttribute('data-loc');
@@ -184,7 +178,6 @@
       previewText.innerText = `${selectedPitch || '未選擇球種'} - ${selectedLoc || '未選擇位置'}`;
     }
 
-    // 發送暗號至 Firebase
     document.getElementById('send-btn').addEventListener('click', () => {
       if (!baseRoom) {
         alert("請先進入頻道！");
@@ -207,25 +200,29 @@
       selectedLoc = "";
     });
 
-    // 解鎖語音權限
     function unlockAudioPermission() {
       if ('speechSynthesis' in window) {
+        window.speechSynthesis.resume();
         const silentUtterance = new SpeechSynthesisUtterance('');
         silentUtterance.volume = 0;
         window.speechSynthesis.speak(silentUtterance);
       }
     }
 
-    // 中文語音播報
+    // 中文語音播報 (強化版本，防垃圾回收與死鎖)
     function speakPitch(text) {
       if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        
+        // 【修復重點2】發聲前先強制恢復 state，防止 Chrome 進入被凍結的 paused 狀態
+        window.speechSynthesis.resume();
+        window.speechSynthesis.cancel(); // 停止前一次播放
+
         const spokenText = text.replace(/指叉球/g, "紙叉球");
-        const utterance = new SpeechSynthesisUtterance(spokenText);
-        utterance.lang = 'zh-TW'; 
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
+        
+        // 賦值給全域變數，避免物件被垃圾回收
+        globalUtterance = new SpeechSynthesisUtterance(spokenText);
+        globalUtterance.lang = 'zh-TW'; 
+        globalUtterance.rate = 1.0;
+        globalUtterance.pitch = 1.0;
 
         const voices = window.speechSynthesis.getVoices();
         if (voices.length > 0) {
@@ -233,10 +230,18 @@
             voice.lang.includes('zh') && 
             (voice.name.includes('Male') || voice.name.includes('Microsoft'))
           );
-          if (preferredVoice) utterance.voice = preferredVoice;
+          if (preferredVoice) globalUtterance.voice = preferredVoice;
         }
 
-        window.speechSynthesis.speak(utterance);
+        // 播放完成後釋放引用
+        globalUtterance.onend = () => {
+          globalUtterance = null;
+        };
+        globalUtterance.onerror = () => {
+          globalUtterance = null;
+        };
+
+        window.speechSynthesis.speak(globalUtterance);
       }
     }
   </script>
